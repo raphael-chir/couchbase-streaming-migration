@@ -1,11 +1,22 @@
 # From RDBMS to Couchbase with Kafka
 
-## Keep control on your cloud resources
+Thanks to Elio Salvatore and David Quintas from Couchbase. This setup is based on https://github.com/Belio/SQLstreamingtoNoSQL
 
-| ![Labs](https://learn.hashicorp.com/_next/static/images/color-c0fe8380afabc1c58f5601c1662a2e2d.svg) | This demo shows you how to automate your architecture implementation in a **Cloud DevOps** approach with [Terraform](https://www.terraform.io/). |
-| :-------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **terraform**                                                                                       | Terraform >= 1.1.9 (an alias tf is create for terraform cli)                                                                                     |
-| **aws**                                                                                             | aws cli v2 (WARNING : you are responsible of your access key, don't forget to deactivate or suppress it in your aws account !)                   |
+Everything can be launched through docker on your laptop, but as it take place and memory usage, it can be useful to deploy the stack on a server.
+
+The architecture is composed by :
+
+- SQL Server : it plays the role of a legacy RDBMS to migrate
+- Confluent : full stack with zookeeper, kafka, control center, ... it is the streaming platform
+- Couchbase : NoSQL Data platform
+
+## Run it
+
+To run directly a full environment we use codesandbox. Click on this link : https://codesandbox.io/s/github/raphael-chir/couchbase-streaming-migration
+
+You need to fork this template to set up your own workspace. For instance modify Readme.md and then save.
+
+Wait while the sandbox starts and install all the tools needed.
 
 ## First check
 
@@ -36,14 +47,6 @@ Default region name [None]: eu-north-1
 Default output format [None]:
 ```
 
-### Doc as code
-
-Generate html page from Readme.md to show in integrated browser (CodeSandbox)
-
-```bash
-sandbox@sse-sandbox-457lgm:/sandbox$ node md2html.js
-```
-
 ## Terraform backend
 
 All terraform state files are stored and shared in a dedicated S3 bucket. Create if needed your own bucket.
@@ -53,7 +56,7 @@ aws s3api create-bucket --bucket a-tfstate-rch --create-bucket-configuration Loc
 aws s3api put-bucket-tagging --bucket a-tfstate-rch --tagging 'TagSet=[{Key=Owner,Value=raphael.chir@couchbase.com},{Key=Name,Value=terraform state set}]'
 ```
 
-Refer your bucket in your terraform backend configuration.
+Refer your bucket in your terraform backend configuration, go to main.tf
 **Specify a key for your project !**
 
 ```bash
@@ -80,121 +83,92 @@ resource_tags = {
 
 ## SSH Keys
 
-### Generate
-
-We need to generate key pair in order to ssh into instances. Create a .ssh folder in tf-playground.
-[SSH Academy](https://www.ssh.com/academy/ssh/keygen#creating-an-ssh-key-pair-for-user-authentication)
-
-Open a terminal and paste this default command
+We need to generate key pair in order to ssh into instances. Create a .ssh folder in tf-playground. Open a terminal and paste this default command
 
 ```bash
+mkdir /sandbox/tf-playground/.ssh
 ssh-keygen -q -t rsa -b 4096 -f /sandbox/tf-playground/.ssh/zkey -N ''
 ```
 
-Change if needed ssh_keys_path variable in terraform.tvars  
-Run this command, if necessary, to ensure your key is not publicly viewable.
+## Choose your OS AMI
 
-```bash
-chmod 400 zkey
-```
-
-### Choosing an Algorithm and Key Size
-
-SSH supports several public key algorithms for authentication keys. These include:
-
-**rsa** - an old algorithm based on the difficulty of factoring large numbers. A key size of at least 2048 bits is recommended for RSA; 4096 bits is better. RSA is getting old and significant advances are being made in factoring. Choosing a different algorithm may be advisable. It is quite possible the RSA algorithm will become practically breakable in the foreseeable future. All SSH clients support this algorithm.
-
-**dsa** - an old US government Digital Signature Algorithm. It is based on the difficulty of computing discrete logarithms. A key size of 1024 would normally be used with it. DSA in its original form is no longer recommended.
-
-**ecdsa** - a new Digital Signature Algorithm standarized by the US government, using elliptic curves. This is probably a good algorithm for current applications. Only three key sizes are supported: 256, 384, and 521 (sic!) bits. We would recommend always using it with 521 bits, since the keys are still small and probably more secure than the smaller keys (even though they should be safe as well). Most SSH clients now support this algorithm.
-
-**ed25519** - this is a new algorithm added in OpenSSH. Support for it in clients is not yet universal. Thus its use in general purpose applications may not yet be advisable.
-
-The algorithm is selected using the -t option and key size using the -b option. The following commands illustrate:
-
-```bash
-ssh-keygen -t rsa -b 4096
-ssh-keygen -t dsa
-ssh-keygen -t ecdsa -b 521
-ssh-keygen -t ed25519
-```
-
-## How to choose your OS AMI
-
-### From AWS console
-
-You can just copy from aws console the **ami-id** needed.  
+You can just copy from aws console the **ami-id** needed in the region targeted  
 e.g : '_Canonical, Ubuntu, 22.04 LTS, amd64 jammy image build on 2022-04-20_' is **ami-01ded35841bc93d7f**
 
-### Advanced search
+## Ready to terraform ?
 
-For specific search based on filters you can also use this command.
-Based on this metadata structure below or see
-[aws ec2 describe-images details](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html)  
-[Another link](https://docs.aws.amazon.com/sdkfornet1/latest/apidocs/html/P_Amazon_EC2_Model_DescribeImagesRequest_Filter.htm)
+When all the steps has been performed you can execute these commands inside /sandbox/tf-playground folder.
+
+Terraform initialisation
 
 ```bash
-[
-    {
-        "Architecture": "x86_64",
-        "CreationDate": "2022-04-21T14:55:48.000Z",
-        "ImageId": "ami-01ded35841bc93d7f",
-        "ImageLocation": "099720109477/ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20220420",
-        "ImageType": "machine",
-        "Public": true,
-        "OwnerId": "099720109477",
-        "PlatformDetails": "Linux/UNIX",
-        "UsageOperation": "RunInstances",
-        "State": "available",
-        "BlockDeviceMappings": [
-            {
-                "DeviceName": "/dev/sda1",
-                "Ebs": {
-                    "DeleteOnTermination": true,
-                    "SnapshotId": "snap-0bc2203755d33f5f6",
-                    "VolumeSize": 8,
-                    "VolumeType": "gp2",
-                    "Encrypted": false
-                }
-            },
-            {
-                "DeviceName": "/dev/sdc",
-                "VirtualName": "ephemeral1"
-            },
-            {
-                "DeviceName": "/dev/sdb",
-                "VirtualName": "ephemeral0"
-            }
-        ],
-        "Description": "Canonical, Ubuntu, 22.04 LTS, amd64 jammy image build on 2022-04-20",
-        "EnaSupport": true,
-        "Hypervisor": "xen",
-        "Name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20220420",
-        "RootDeviceName": "/dev/sda1",
-        "RootDeviceType": "ebs",
-        "SriovNetSupport": "simple",
-        "VirtualizationType": "hvm",
-        "DeprecationTime": "2024-04-21T14:55:48.000Z"
-    }
-]
+sandbox@sse-sandbox-zp6o6o:/sandbox/tf-playground$ tf init
+Initializing modules...
+
+Initializing the backend...
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/aws from the dependency lock file
+- Using previously-installed hashicorp/aws v4.12.1
+
+Terraform has been successfully initialized!
 ```
 
-You can find specific ami with this command
+Terraform validation
 
 ```bash
-aws ec2 describe-images --region eu-north-1 --query "Images[*].[Description,ImageId]" --filters"Name=name,Values=ubuntu*" "Name=creation-date,Values=2022*" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" "Name=block-device-mapping.volume-type,Values=gp2" "Name=image-type,Values=machine" "Name=state,Values=available" "Name=description,Values=*Ubuntu*22.04*"
+sandbox@sse-sandbox-zp6o6o:/sandbox/tf-playground$ tf validate
+Success! The configuration is valid.
 ```
 
-Or write it into a file
+Terraform plan
 
 ```bash
-echo $(aws ec2 describe-images --region eu-north-1 --query "Images[*].[Description,ImageId]" --filters "Name=name,Values=ubuntu*" "Name=creation-date,Values=2022*" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" "Name=block-device-mapping.volume-type,Values=gp2" "Name=image-type,Values=machine" "Name=state,Values=available" "Name=description,Values=*Ubuntu*22.04*")>ami.json
+sandbox@sse-sandbox-zp6o6o:/sandbox/tf-playground$ tf plan
+Terraform used the selected providers to generate the following execution plan. Resource
+actions are indicated with the following symbols:
+  + create
+ <= read (data resources)
+
+Terraform will perform the following actions:
+.................
+.................
 ```
 
-Use list to see all namespaces
+Terraform apply
 
 ```bash
-aws ssm get-parameters-by-path \
---path /aws/service/ami-amazon-linux-latest \
---query 'Parameters[].Name' --region eu-north-1
+sandbox@sse-sandbox-zp6o6o:/sandbox/tf-playground$ tf apply -auto-approve
+.................
+.................
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance01-ssh = "ssh -i /sandbox/tf-playground/.ssh/zkey ubuntu@13.48.45.243"
+instance01_confluent_public_dns = "ec2-13-48-45-243.eu-north-1.compute.amazonaws.com:9021"
+instance01_couchbase_public_dns = "ec2-13-48-45-243.eu-north-1.compute.amazonaws.com:8091"
+```
+
+## Wait while all installation are ready !!
+
+Because almost 10Go of binaries will be load and installed, you can take a coffee.
+The installation can take more than 6 minutes ..
+
+## Play
+
+Access thes different dns urls : check all the configuration, and objects created. In Couchbase bucket test has a store scope with empty collections
+Then copy ssh command from terraform outputs and paste it into a new terminal.
+execute this command to stream the data from SQL Server to Couchbase
+
+```bash
+ubuntu@ec2-ip:/home/ubuntu/deploy_ksql ksqldb.sql
+```
+
+## Destroy when finished
+
+Because t3.xlarge, destroy everything :
+
+```bash
+sandbox@sse-sandbox-zp6o6o:/sandbox/tf-playground$ tf destroy -auto-approve
 ```
